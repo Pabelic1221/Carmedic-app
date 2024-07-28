@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, TextInput, Button, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { initializeApp } from 'firebase/app';
-import { initializeAuth, getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut, getReactNativePersistence } from 'firebase/auth';
+import { firebase } from '@react-native-firebase/app';
+import auth from '@react-native-firebase/auth';
+import dynamicLinks from '@react-native-firebase/dynamic-links';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAnNYYtllwo9dfOF636KcGXfNhiBC6EYQI",
   authDomain: "carmedicdb.firebaseapp.com",
@@ -17,11 +17,9 @@ const firebaseConfig = {
   measurementId: "G-G6WTDZB2Z9"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
 const AuthScreen = ({
   firstName, setFirstName,
@@ -30,9 +28,7 @@ const AuthScreen = ({
   email, setEmail,
   password, setPassword,
   confirmPassword, setConfirmPassword,
-  streetAddress, setStreetAddress,
-  city, setCity,
-  state, setState,
+  address, setAddress,
   zipCode, setZipCode,
   isLogin, setIsLogin,
   handleAuthentication,
@@ -64,21 +60,9 @@ const AuthScreen = ({
           />
           <TextInput
             style={styles.input}
-            value={streetAddress}
-            onChangeText={setStreetAddress}
-            placeholder="Street Address"
-          />
-          <TextInput
-            style={styles.input}
-            value={city}
-            onChangeText={setCity}
-            placeholder="City"
-          />
-          <TextInput
-            style={styles.input}
-            value={state}
-            onChangeText={setState}
-            placeholder="State"
+            value={address}
+            onChangeText={setAddress}
+            placeholder="Street, City, State"
           />
           <TextInput
             style={styles.input}
@@ -140,9 +124,7 @@ export default function App() {
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [streetAddress, setStreetAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
+  const [address, setAddress] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -152,9 +134,22 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = auth().onAuthStateChanged((user) => {
       setUser(user);
     });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handleDynamicLink = async (link) => {
+      if (link.url.includes('mode=verifyEmail')) {
+        Alert.alert('Email Verified', 'Your email has been verified. You can now log in.');
+        setIsLogin(true); // Redirect to the sign-in screen
+      }
+    };
+
+    const unsubscribe = dynamicLinks().onLink(handleDynamicLink);
 
     return () => unsubscribe();
   }, []);
@@ -168,23 +163,33 @@ export default function App() {
     setIsLoading(true);
     try {
       if (user) {
-        await signOut(auth);
+        await auth().signOut();
         console.log('User logged out successfully!');
       } else {
         if (isLogin) {
-          await signInWithEmailAndPassword(auth, email, password);
+          const userCredential = await auth().signInWithEmailAndPassword(email, password);
           console.log('User signed in successfully!');
-          if (!auth.currentUser.emailVerified) {
-            Alert.alert('Email Verification', 'Please verify your email before logging in.');
-            await signOut(auth);
+          // Check if email is verified
+          if (!userCredential.user.emailVerified) {
+            Alert.alert('Email Verification', 'User not verified. Please verify your email before logging in.');
+            await auth().signOut(); // Sign out the user if email is not verified
             return;
           }
         } else {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          const userCredential = await auth().createUserWithEmailAndPassword(email, password);
           console.log('User created successfully!');
-          await sendEmailVerification(auth.currentUser);
+
+          // Send verification email
+          await userCredential.user.sendEmailVerification();
           Alert.alert('Email Verification', 'Verification email sent. Please check your inbox.');
-          await signOut(auth);
+
+          // Optionally, you can update the user profile
+          await userCredential.user.updateProfile({
+            displayName: `${firstName} ${lastName}`,
+          });
+
+          // Sign out the user to force them to verify email before logging in
+          await auth().signOut();
         }
       }
     } catch (error) {
@@ -205,9 +210,7 @@ export default function App() {
           firstName={firstName} setFirstName={setFirstName}
           middleName={middleName} setMiddleName={setMiddleName}
           lastName={lastName} setLastName={setLastName}
-          streetAddress={streetAddress} setStreetAddress={setStreetAddress}
-          city={city} setCity={setCity}
-          state={state} setState={setState}
+          address={address} setAddress={setAddress}
           zipCode={zipCode} setZipCode={setZipCode}
           email={email} setEmail={setEmail}
           password={password} setPassword={setPassword}
