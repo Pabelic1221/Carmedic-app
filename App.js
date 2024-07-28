@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, TextInput, Button, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { initializeApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence, getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { initializeAuth, getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAnNYYtllwo9dfOF636KcGXfNhiBC6EYQI",
   authDomain: "carmedicdb.firebaseapp.com",
@@ -16,11 +17,10 @@ const firebaseConfig = {
   measurementId: "G-G6WTDZB2Z9"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
-// FIREBASE AUTH AND ASYNCSTORAGE
 const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
+  persistence: getReactNativePersistence(AsyncStorage)
 });
 
 const AuthScreen = ({
@@ -157,7 +157,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [auth]);
+  }, []);
 
   const handleAuthentication = async () => {
     if (!isLogin && password !== confirmPassword) {
@@ -174,9 +174,17 @@ export default function App() {
         if (isLogin) {
           await signInWithEmailAndPassword(auth, email, password);
           console.log('User signed in successfully!');
+          if (!auth.currentUser.emailVerified) {
+            Alert.alert('Email Verification', 'Please verify your email before logging in.');
+            await signOut(auth);
+            return;
+          }
         } else {
-          await createUserWithEmailAndPassword(auth, email, password);
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
           console.log('User created successfully!');
+          await sendEmailVerification(auth.currentUser);
+          Alert.alert('Email Verification', 'Verification email sent. Please check your inbox.');
+          await signOut(auth);
         }
       }
     } catch (error) {
@@ -194,28 +202,17 @@ export default function App() {
         <AuthenticatedScreen user={user} handleAuthentication={handleAuthentication} />
       ) : (
         <AuthScreen
-          firstName={firstName}
-          setFirstName={setFirstName}
-          middleName={middleName}
-          setMiddleName={setMiddleName}
-          lastName={lastName}
-          setLastName={setLastName}
-          streetAddress={streetAddress}
-          setStreetAddress={setStreetAddress}
-          city={city}
-          setCity={setCity}
-          state={state}
-          setState={setState}
-          zipCode={zipCode}
-          setZipCode={setZipCode}
-          email={email}
-          setEmail={setEmail}
-          password={password}
-          setPassword={setPassword}
-          confirmPassword={confirmPassword}
-          setConfirmPassword={setConfirmPassword}
-          isLogin={isLogin}
-          setIsLogin={setIsLogin}
+          firstName={firstName} setFirstName={setFirstName}
+          middleName={middleName} setMiddleName={setMiddleName}
+          lastName={lastName} setLastName={setLastName}
+          streetAddress={streetAddress} setStreetAddress={setStreetAddress}
+          city={city} setCity={setCity}
+          state={state} setState={setState}
+          zipCode={zipCode} setZipCode={setZipCode}
+          email={email} setEmail={setEmail}
+          password={password} setPassword={setPassword}
+          confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
+          isLogin={isLogin} setIsLogin={setIsLogin}
           handleAuthentication={handleAuthentication}
           isLoading={isLoading}
         />
