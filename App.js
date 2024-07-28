@@ -18,15 +18,77 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-//FIREBASE AUTH AND ASYNCSTORAGE
+// FIREBASE AUTH AND ASYNCSTORAGE
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage),
 });
 
-const AuthScreen = ({ email, setEmail, password, setPassword, isLogin, setIsLogin, handleAuthentication, isLoading }) => {
+const AuthScreen = ({
+  firstName, setFirstName,
+  middleName, setMiddleName,
+  lastName, setLastName,
+  email, setEmail,
+  password, setPassword,
+  confirmPassword, setConfirmPassword,
+  streetAddress, setStreetAddress,
+  city, setCity,
+  state, setState,
+  zipCode, setZipCode,
+  isLogin, setIsLogin,
+  handleAuthentication,
+  isLoading
+}) => {
   return (
     <View style={styles.authContainer}>
       <Text style={styles.title}>{isLogin ? 'Sign In' : 'Sign Up'}</Text>
+
+      {!isLogin && (
+        <>
+          <TextInput
+            style={styles.input}
+            value={firstName}
+            onChangeText={setFirstName}
+            placeholder="First Name"
+          />
+          <TextInput
+            style={styles.input}
+            value={middleName}
+            onChangeText={setMiddleName}
+            placeholder="Middle Name"
+          />
+          <TextInput
+            style={styles.input}
+            value={lastName}
+            onChangeText={setLastName}
+            placeholder="Last Name"
+          />
+          <TextInput
+            style={styles.input}
+            value={streetAddress}
+            onChangeText={setStreetAddress}
+            placeholder="Street Address"
+          />
+          <TextInput
+            style={styles.input}
+            value={city}
+            onChangeText={setCity}
+            placeholder="City"
+          />
+          <TextInput
+            style={styles.input}
+            value={state}
+            onChangeText={setState}
+            placeholder="State"
+          />
+          <TextInput
+            style={styles.input}
+            value={zipCode}
+            onChangeText={setZipCode}
+            placeholder="ZIP Code"
+            keyboardType="numeric"
+          />
+        </>
+      )}
 
       <TextInput
         style={styles.input}
@@ -42,6 +104,15 @@ const AuthScreen = ({ email, setEmail, password, setPassword, isLogin, setIsLogi
         placeholder="Password"
         secureTextEntry
       />
+      {!isLogin && (
+        <TextInput
+          style={styles.input}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder="Confirm Password"
+          secureTextEntry
+        />
+      )}
       <View style={styles.buttonContainer}>
         <Button title={isLogin ? 'Sign In' : 'Sign Up'} onPress={handleAuthentication} color="#3498db" />
       </View>
@@ -53,7 +124,7 @@ const AuthScreen = ({ email, setEmail, password, setPassword, isLogin, setIsLogi
       </View>
     </View>
   );
-}
+};
 
 const AuthenticatedScreen = ({ user, handleAuthentication }) => {
   return (
@@ -66,8 +137,16 @@ const AuthenticatedScreen = ({ user, handleAuthentication }) => {
 };
 
 export default function App() {
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [streetAddress, setStreetAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [zipCode, setZipCode] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [user, setUser] = useState(null);
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,6 +160,11 @@ export default function App() {
   }, [auth]);
 
   const handleAuthentication = async () => {
+    if (!isLogin && password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
     setIsLoading(true);
     try {
       if (user) {
@@ -110,10 +194,26 @@ export default function App() {
         <AuthenticatedScreen user={user} handleAuthentication={handleAuthentication} />
       ) : (
         <AuthScreen
+          firstName={firstName}
+          setFirstName={setFirstName}
+          middleName={middleName}
+          setMiddleName={setMiddleName}
+          lastName={lastName}
+          setLastName={setLastName}
+          streetAddress={streetAddress}
+          setStreetAddress={setStreetAddress}
+          city={city}
+          setCity={setCity}
+          state={state}
+          setState={setState}
+          zipCode={zipCode}
+          setZipCode={setZipCode}
           email={email}
           setEmail={setEmail}
           password={password}
           setPassword={setPassword}
+          confirmPassword={confirmPassword}
+          setConfirmPassword={setConfirmPassword}
           isLogin={isLogin}
           setIsLogin={setIsLogin}
           handleAuthentication={handleAuthentication}
