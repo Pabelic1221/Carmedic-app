@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, TextInput, Button, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { firebase } from '@react-native-firebase/app';
-import auth from '@react-native-firebase/auth';
-import dynamicLinks from '@react-native-firebase/dynamic-links';
+import { initializeApp } from 'firebase/app';
+import { initializeAuth, getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAnNYYtllwo9dfOF636KcGXfNhiBC6EYQI",
   authDomain: "carmedicdb.firebaseapp.com",
@@ -17,63 +17,135 @@ const firebaseConfig = {
   measurementId: "G-G6WTDZB2Z9"
 };
 
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
 
 const AuthScreen = ({
+  setRegistrationType,
+  setIsRegistering,
+  isLogin,
+  setIsLogin,
+  handleAuthentication,
+  isLoading,
+}) => {
+  return (
+    <View style={styles.authContainer}>
+      <Text style={styles.title}>{isLogin ? 'Sign In' : 'Sign Up'}</Text>
+
+      {isLogin ? (
+        <>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            autoCapitalize="none"
+            onChangeText={(text) => setEmail(text)}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            secureTextEntry
+            onChangeText={(text) => setPassword(text)}
+          />
+          <View style={styles.buttonContainer}>
+            <Button title="Sign In" onPress={handleAuthentication} color="#3498db" />
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={styles.verticalButtonContainer}>
+            <View style={styles.buttonContainer}>
+              <Button title="Sign Up as User" onPress={() => { setRegistrationType('User'); setIsRegistering(true); }} color="#3498db" />
+            </View>
+            <View style={styles.buttonContainer}>
+              <Button title="Sign Up as Auto Repair Shop" onPress={() => { setRegistrationType('Shop'); setIsRegistering(true); }} color="#3498db" />
+            </View>
+          </View>
+        </>
+      )}
+      {isLoading && <ActivityIndicator size="large" color="#3498db" />}
+      <View style={styles.bottomContainer}>
+        <Text style={styles.toggleText} onPress={() => setIsLogin(!isLogin)}>
+          {isLogin ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+
+const UserRegistrationForm = ({
   firstName, setFirstName,
   middleName, setMiddleName,
   lastName, setLastName,
   email, setEmail,
   password, setPassword,
   confirmPassword, setConfirmPassword,
-  address, setAddress,
+  streetAddress, setStreetAddress,
+  city, setCity,
+  state, setState,
   zipCode, setZipCode,
-  isLogin, setIsLogin,
+  phoneNumber, setPhoneNumber,
   handleAuthentication,
-  isLoading
+  isLoading,
+  passwordsMatch,
+  goBack
 }) => {
   return (
     <View style={styles.authContainer}>
-      <Text style={styles.title}>{isLogin ? 'Sign In' : 'Sign Up'}</Text>
-
-      {!isLogin && (
-        <>
-          <TextInput
-            style={styles.input}
-            value={firstName}
-            onChangeText={setFirstName}
-            placeholder="First Name"
-          />
-          <TextInput
-            style={styles.input}
-            value={middleName}
-            onChangeText={setMiddleName}
-            placeholder="Middle Name"
-          />
-          <TextInput
-            style={styles.input}
-            value={lastName}
-            onChangeText={setLastName}
-            placeholder="Last Name"
-          />
-          <TextInput
-            style={styles.input}
-            value={address}
-            onChangeText={setAddress}
-            placeholder="Street, City, State"
-          />
-          <TextInput
-            style={styles.input}
-            value={zipCode}
-            onChangeText={setZipCode}
-            placeholder="ZIP Code"
-            keyboardType="numeric"
-          />
-        </>
-      )}
-
+      <Text style={styles.title}>Sign Up as User</Text>
+      <TextInput
+        style={styles.input}
+        value={firstName}
+        onChangeText={setFirstName}
+        placeholder="First Name"
+      />
+      <TextInput
+        style={styles.input}
+        value={middleName}
+        onChangeText={setMiddleName}
+        placeholder="Middle Name"
+      />
+      <TextInput
+        style={styles.input}
+        value={lastName}
+        onChangeText={setLastName}
+        placeholder="Last Name"
+      />
+      <TextInput
+        style={styles.input}
+        value={streetAddress}
+        onChangeText={setStreetAddress}
+        placeholder="Street Address"
+      />
+      <TextInput
+        style={styles.input}
+        value={city}
+        onChangeText={setCity}
+        placeholder="City"
+      />
+      <TextInput
+        style={styles.input}
+        value={state}
+        onChangeText={setState}
+        placeholder="State"
+      />
+      <TextInput
+        style={styles.input}
+        value={zipCode}
+        onChangeText={setZipCode}
+        placeholder="ZIP Code"
+        keyboardType="numeric"
+      />
+      <TextInput
+        style={styles.input}
+        value={phoneNumber}
+        onChangeText={setPhoneNumber}
+        placeholder="Phone Number"
+        keyboardType="phone-pad"
+      />
       <TextInput
         style={styles.input}
         value={email}
@@ -88,25 +160,127 @@ const AuthScreen = ({
         placeholder="Password"
         secureTextEntry
       />
-      {!isLogin && (
-        <TextInput
-          style={styles.input}
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          placeholder="Confirm Password"
-          secureTextEntry
-        />
-      )}
+      <TextInput
+        style={[styles.input, !passwordsMatch && styles.inputError]}
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        placeholder="Confirm Password"
+        secureTextEntry
+      />
       <View style={styles.buttonContainer}>
-        <Button title={isLogin ? 'Sign In' : 'Sign Up'} onPress={handleAuthentication} color="#3498db" />
+        <Button title="Sign Up" onPress={handleAuthentication} color="#3498db" />
       </View>
       {isLoading && <ActivityIndicator size="large" color="#3498db" />}
-      <View style={styles.bottomContainer}>
-        <Text style={styles.toggleText} onPress={() => setIsLogin(!isLogin)}>
-          {isLogin ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}
-        </Text>
-      </View>
+      <Button title="Back" onPress={goBack} color="#3498db" />
     </View>
+  );
+};
+
+const ShopRegistrationForm = ({
+  firstName, setFirstName,
+  middleName, setMiddleName,
+  lastName, setLastName,
+  shopName, setShopName,
+  email, setEmail,
+  password, setPassword,
+  confirmPassword, setConfirmPassword,
+  streetAddress, setStreetAddress,
+  city, setCity,
+  state, setState,
+  zipCode, setZipCode,
+  phoneNumber, setPhoneNumber,
+  handleAuthentication,
+  isLoading,
+  passwordsMatch,
+  goBack
+}) => {
+  return (
+    <View style={styles.authContainer}>
+      <Text style={styles.title}>Sign Up as Auto Repair Shop</Text>
+      <TextInput
+        style={styles.input}
+        value={firstName}
+        onChangeText={setFirstName}
+        placeholder="First Name"
+      />
+      <TextInput
+        style={styles.input}
+        value={middleName}
+        onChangeText={setMiddleName}
+        placeholder="Middle Name"
+      />
+      <TextInput
+        style={styles.input}
+        value={lastName}
+        onChangeText={setLastName}
+        placeholder="Last Name"
+      />
+      <TextInput
+        style={styles.input}
+        value={shopName}
+        onChangeText={setShopName}
+        placeholder="Name of Shop"
+      />
+      <TextInput
+        style={styles.input}
+        value={streetAddress}
+        onChangeText={setStreetAddress}
+        placeholder="Street Address"
+      />
+      <TextInput
+        style={styles.input}
+        value={city}
+        onChangeText={setCity}
+        placeholder="City"
+      />
+      <TextInput
+        style={styles.input}
+        value={state}
+        onChangeText={setState}
+        placeholder="State"
+      />
+      <TextInput
+        style={styles.input}
+        value={zipCode}
+        onChangeText={setZipCode}
+        placeholder="ZIP Code"
+        keyboardType="numeric"
+      />
+      <TextInput
+        style={styles.input}
+        value={phoneNumber}
+        onChangeText={setPhoneNumber}
+        placeholder="Phone Number"
+        keyboardType="phone-pad"
+      />
+      <TextInput
+        style={styles.input}
+        value={email}
+        onChangeText={setEmail}
+        placeholder="Email"
+        autoCapitalize="none"
+      />
+      <TextInput
+        style={styles.input}
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Password"
+        secureTextEntry
+      />
+      <TextInput
+        style={[styles.input, !passwordsMatch && styles.inputError]}
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        placeholder="Confirm Password"
+        secureTextEntry
+      />
+      <View style={styles.buttonContainer}>
+        <Button title="Sign Up" onPress={handleAuthentication} color="#3498db" />
+      </View>
+      {isLoading && <ActivityIndicator size="large" color="#3498db" />}
+      <Button title="Back" onPress={goBack} color="#3498db" />
+    </View>
+    
   );
 };
 
@@ -124,32 +298,29 @@ export default function App() {
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [address, setAddress] = useState('');
+  const [shopName, setShopName] = useState('');
+  const [streetAddress, setStreetAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [user, setUser] = useState(null);
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [registrationType, setRegistrationType] = useState(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const handleBack = () => {
+    setIsRegistering(false);
+    setRegistrationType(null);
+  };
 
   useEffect(() => {
-    const unsubscribe = auth().onAuthStateChanged((user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
     });
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const handleDynamicLink = async (link) => {
-      if (link.url.includes('mode=verifyEmail')) {
-        Alert.alert('Email Verified', 'Your email has been verified. You can now log in.');
-        setIsLogin(true); // Redirect to the sign-in screen
-      }
-    };
-
-    const unsubscribe = dynamicLinks().onLink(handleDynamicLink);
 
     return () => unsubscribe();
   }, []);
@@ -163,33 +334,23 @@ export default function App() {
     setIsLoading(true);
     try {
       if (user) {
-        await auth().signOut();
+        await signOut(auth);
         console.log('User logged out successfully!');
       } else {
         if (isLogin) {
-          const userCredential = await auth().signInWithEmailAndPassword(email, password);
+          await signInWithEmailAndPassword(auth, email, password);
           console.log('User signed in successfully!');
-          // Check if email is verified
-          if (!userCredential.user.emailVerified) {
-            Alert.alert('Email Verification', 'User not verified. Please verify your email before logging in.');
-            await auth().signOut(); // Sign out the user if email is not verified
+          if (!auth.currentUser.emailVerified) {
+            Alert.alert('Email Verification', 'Please verify your email before logging in.');
+            await signOut(auth);
             return;
           }
         } else {
-          const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
           console.log('User created successfully!');
-
-          // Send verification email
-          await userCredential.user.sendEmailVerification();
+          await sendEmailVerification(auth.currentUser);
           Alert.alert('Email Verification', 'Verification email sent. Please check your inbox.');
-
-          // Optionally, you can update the user profile
-          await userCredential.user.updateProfile({
-            displayName: `${firstName} ${lastName}`,
-          });
-
-          // Sign out the user to force them to verify email before logging in
-          await auth().signOut();
+          await signOut(auth);
         }
       }
     } catch (error) {
@@ -200,25 +361,62 @@ export default function App() {
     }
   };
 
+  const passwordsMatch = password === confirmPassword;
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <StatusBar style="auto" />
       {user ? (
         <AuthenticatedScreen user={user} handleAuthentication={handleAuthentication} />
       ) : (
-        <AuthScreen
-          firstName={firstName} setFirstName={setFirstName}
-          middleName={middleName} setMiddleName={setMiddleName}
-          lastName={lastName} setLastName={setLastName}
-          address={address} setAddress={setAddress}
-          zipCode={zipCode} setZipCode={setZipCode}
-          email={email} setEmail={setEmail}
-          password={password} setPassword={setPassword}
-          confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
-          isLogin={isLogin} setIsLogin={setIsLogin}
-          handleAuthentication={handleAuthentication}
-          isLoading={isLoading}
-        />
+        !isRegistering ? (
+          <AuthScreen
+            setRegistrationType={setRegistrationType}
+            setIsRegistering={setIsRegistering}
+            isLogin={isLogin} setIsLogin={setIsLogin}
+            handleAuthentication={handleAuthentication}
+            isLoading={isLoading}
+          />
+        ) : (
+          registrationType === 'User' ? (
+            <UserRegistrationForm
+              firstName={firstName} setFirstName={setFirstName}
+              middleName={middleName} setMiddleName={setMiddleName}
+              lastName={lastName} setLastName={setLastName}
+              streetAddress={streetAddress} setStreetAddress={setStreetAddress}
+              city={city} setCity={setCity}
+              state={state} setState={setState}
+              zipCode={zipCode} setZipCode={setZipCode}
+              phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber}
+              email={email} setEmail={setEmail}
+              password={password} setPassword={setPassword}
+              confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
+              handleAuthentication={handleAuthentication}
+              isLoading={isLoading}
+              passwordsMatch={passwordsMatch}
+              goBack={handleBack}
+            />
+          ) : (
+            <ShopRegistrationForm
+              firstName={firstName} setFirstName={setFirstName}
+              middleName={middleName} setMiddleName={setMiddleName}
+              lastName={lastName} setLastName={setLastName}
+              shopName={shopName} setShopName={setShopName}
+              streetAddress={streetAddress} setStreetAddress={setStreetAddress}
+              city={city} setCity={setCity}
+              state={state} setState={setState}
+              zipCode={zipCode} setZipCode={setZipCode}
+              phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber}
+              email={email} setEmail={setEmail}
+              password={password} setPassword={setPassword}
+              confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
+              handleAuthentication={handleAuthentication}
+              isLoading={isLoading}
+              passwordsMatch={passwordsMatch}
+              goBack={handleBack}
+            />
+          )
+        )
       )}
     </ScrollView>
   );
@@ -245,6 +443,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
+  subtitle: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+    color: '#3498db',
+  },
   input: {
     height: 40,
     borderColor: '#ddd',
@@ -253,8 +457,15 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 4,
   },
+  inputError: {
+    borderColor: '#e74c3c',
+  },
   buttonContainer: {
     marginBottom: 16,
+  },
+  verticalButtonContainer: {
+    flexDirection: 'column',
+    justifyContent: 'space-between',
   },
   toggleText: {
     color: '#3498db',
