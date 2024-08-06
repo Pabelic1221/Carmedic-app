@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text, TextInput, Button, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { initializeApp } from 'firebase/app';
 import { initializeAuth, getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut, getReactNativePersistence } from 'firebase/auth';
+import { getFirestore, setDoc, doc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase configuration
@@ -22,6 +23,7 @@ const app = initializeApp(firebaseConfig);
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage)
 });
+const db = getFirestore(app);
 
 const AuthScreen = ({
   setRegistrationType,
@@ -74,7 +76,6 @@ const AuthScreen = ({
     </View>
   );
 };
-
 
 const UserRegistrationForm = ({
   firstName, setFirstName,
@@ -280,81 +281,75 @@ const ShopRegistrationForm = ({
       {isLoading && <ActivityIndicator size="large" color="#3498db" />}
       <Button title="Back" onPress={goBack} color="#3498db" />
     </View>
-    
-  );
-};
-
-const AuthenticatedScreen = ({ user, handleAuthentication }) => {
-  return (
-    <View style={styles.authContainer}>
-      <Text style={styles.title}>Welcome</Text>
-      <Text style={styles.emailText}>{user.email}</Text>
-      <Button title="Logout" onPress={handleAuthentication} color="#e74c3c" />
-    </View>
   );
 };
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [isLogin, setIsLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
   const [shopName, setShopName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [streetAddress, setStreetAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [user, setUser] = useState(null);
-  const [isLogin, setIsLogin] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [registrationType, setRegistrationType] = useState(null);
+  const [registrationType, setRegistrationType] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
-  const handleBack = () => {
-    setIsRegistering(false);
-    setRegistrationType(null);
-  };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (authenticatedUser) => {
+      setUser(authenticatedUser);
+      setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   }, []);
 
   const handleAuthentication = async () => {
-    if (!isLogin && password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+    if (password !== confirmPassword) {
+      Alert.alert('Passwords do not match', 'Please make sure your passwords match.');
       return;
     }
 
     setIsLoading(true);
+
     try {
-      if (user) {
-        await signOut(auth);
-        console.log('User logged out successfully!');
+      let userCredential;
+
+      if (isLogin) {
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
       } else {
-        if (isLogin) {
-          await signInWithEmailAndPassword(auth, email, password);
-          console.log('User signed in successfully!');
-          if (!auth.currentUser.emailVerified) {
-            Alert.alert('Email Verification', 'Please verify your email before logging in.');
-            await signOut(auth);
-            return;
-          }
-        } else {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          console.log('User created successfully!');
-          await sendEmailVerification(auth.currentUser);
-          Alert.alert('Email Verification', 'Verification email sent. Please check your inbox.');
-          await signOut(auth);
-        }
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+        await sendEmailVerification(userCredential.user);
+
+        const userData = {
+          firstName,
+          middleName,
+          lastName,
+          email,
+          streetAddress,
+          city,
+          state,
+          zipCode,
+          phoneNumber,
+          role: registrationType,
+          shopName: registrationType === 'Shop' ? shopName : null,
+        };
+
+        await setDoc(doc(db, 'users', userCredential.user.uid), userData);
       }
+
+      setUser(userCredential.user);
     } catch (error) {
-      console.error('Authentication error:', error.message);
+      console.error('Error during authentication', error);
       Alert.alert('Authentication Error', error.message);
     } finally {
       setIsLoading(false);
@@ -363,120 +358,181 @@ export default function App() {
 
   const passwordsMatch = password === confirmPassword;
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <StatusBar style="auto" />
-      {user ? (
-        <AuthenticatedScreen user={user} handleAuthentication={handleAuthentication} />
-      ) : (
-        !isRegistering ? (
-          <AuthScreen
-            setRegistrationType={setRegistrationType}
-            setIsRegistering={setIsRegistering}
-            isLogin={isLogin} setIsLogin={setIsLogin}
+  const goBack = () => {
+    setIsRegistering(false);
+    setFirstName('');
+    setMiddleName('');
+    setLastName('');
+    setShopName('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setStreetAddress('');
+    setCity('');
+    setState('');
+    setZipCode('');
+    setPhoneNumber('');
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#3498db" />
+      </View>
+    );
+  }
+
+  if (user) {
+    return (
+      <View style={styles.container}>
+        <Text>Welcome, {user.email}</Text>
+        <Button title="Sign Out" onPress={() => signOut(auth)} />
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
+
+  if (isRegistering) {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        {registrationType === 'User' ? (
+          <UserRegistrationForm
+            firstName={firstName}
+            setFirstName={setFirstName}
+            middleName={middleName}
+            setMiddleName={setMiddleName}
+            lastName={lastName}
+            setLastName={setLastName}
+            email={email}
+            setEmail={setEmail}
+            password={password}
+            setPassword={setPassword}
+            confirmPassword={confirmPassword}
+            setConfirmPassword={setConfirmPassword}
+            streetAddress={streetAddress}
+            setStreetAddress={setStreetAddress}
+            city={city}
+            setCity={setCity}
+            state={state}
+            setState={setState}
+            zipCode={zipCode}
+            setZipCode={setZipCode}
+            phoneNumber={phoneNumber}
+            setPhoneNumber={setPhoneNumber}
             handleAuthentication={handleAuthentication}
             isLoading={isLoading}
+            passwordsMatch={passwordsMatch}
+            goBack={goBack}
           />
         ) : (
-          registrationType === 'User' ? (
-            <UserRegistrationForm
-              firstName={firstName} setFirstName={setFirstName}
-              middleName={middleName} setMiddleName={setMiddleName}
-              lastName={lastName} setLastName={setLastName}
-              streetAddress={streetAddress} setStreetAddress={setStreetAddress}
-              city={city} setCity={setCity}
-              state={state} setState={setState}
-              zipCode={zipCode} setZipCode={setZipCode}
-              phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber}
-              email={email} setEmail={setEmail}
-              password={password} setPassword={setPassword}
-              confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
-              handleAuthentication={handleAuthentication}
-              isLoading={isLoading}
-              passwordsMatch={passwordsMatch}
-              goBack={handleBack}
-            />
-          ) : (
-            <ShopRegistrationForm
-              firstName={firstName} setFirstName={setFirstName}
-              middleName={middleName} setMiddleName={setMiddleName}
-              lastName={lastName} setLastName={setLastName}
-              shopName={shopName} setShopName={setShopName}
-              streetAddress={streetAddress} setStreetAddress={setStreetAddress}
-              city={city} setCity={setCity}
-              state={state} setState={setState}
-              zipCode={zipCode} setZipCode={setZipCode}
-              phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber}
-              email={email} setEmail={setEmail}
-              password={password} setPassword={setPassword}
-              confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword}
-              handleAuthentication={handleAuthentication}
-              isLoading={isLoading}
-              passwordsMatch={passwordsMatch}
-              goBack={handleBack}
-            />
-          )
-        )
-      )}
-    </ScrollView>
+          <ShopRegistrationForm
+            firstName={firstName}
+            setFirstName={setFirstName}
+            middleName={middleName}
+            setMiddleName={setMiddleName}
+            lastName={lastName}
+            setLastName={setLastName}
+            shopName={shopName}
+            setShopName={setShopName}
+            email={email}
+            setEmail={setEmail}
+            password={password}
+            setPassword={setPassword}
+            confirmPassword={confirmPassword}
+            setConfirmPassword={setConfirmPassword}
+            streetAddress={streetAddress}
+            setStreetAddress={setStreetAddress}
+            city={city}
+            setCity={setCity}
+            state={state}
+            setState={setState}
+            zipCode={zipCode}
+            setZipCode={setZipCode}
+            phoneNumber={phoneNumber}
+            setPhoneNumber={setPhoneNumber}
+            handleAuthentication={handleAuthentication}
+            isLoading={isLoading}
+            passwordsMatch={passwordsMatch}
+            goBack={goBack}
+          />
+        )}
+      </ScrollView>
+    );
+  }
+
+  return (
+    <AuthScreen
+      setRegistrationType={setRegistrationType}
+      setIsRegistering={setIsRegistering}
+      isLogin={isLogin}
+      setIsLogin={setIsLogin}
+      handleAuthentication={handleAuthentication}
+      isLoading={isLoading}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#fff',
+    padding: 20,
   },
   authContainer: {
-    width: '80%',
+    width: '100%',
     maxWidth: 400,
-    backgroundColor: '#fff',
-    padding: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#ccc',
     borderRadius: 8,
-    elevation: 3,
+    backgroundColor: '#fff',
   },
   title: {
     fontSize: 24,
-    marginBottom: 16,
+    fontWeight: 'bold',
+    marginBottom: 20,
     textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    marginBottom: 16,
-    textAlign: 'center',
-    color: '#3498db',
   },
   input: {
-    height: 40,
-    borderColor: '#ddd',
+    height: 50,
+    borderColor: '#ccc',
     borderWidth: 1,
-    marginBottom: 16,
-    padding: 8,
-    borderRadius: 4,
+    borderRadius: 5,
+    marginBottom: 15,
+    paddingHorizontal: 10,
   },
   inputError: {
-    borderColor: '#e74c3c',
+    borderColor: 'red',
   },
   buttonContainer: {
-    marginBottom: 16,
+    marginBottom: 10,
+  },
+  bottomContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  toggleText: {
+    color: '#3498db',
+    textDecorationLine: 'underline',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   verticalButtonContainer: {
     flexDirection: 'column',
     justifyContent: 'space-between',
-  },
-  toggleText: {
-    color: '#3498db',
-    textAlign: 'center',
-  },
-  bottomContainer: {
-    marginTop: 20,
-  },
-  emailText: {
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 20,
+    alignItems: 'center',
+    height: 200,
   },
 });
